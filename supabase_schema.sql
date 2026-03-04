@@ -82,6 +82,7 @@ CREATE OR REPLACE FUNCTION public.upsert_listing(
     p_source_url TEXT,
     p_current_price DECIMAL,
     p_vehicle_year INT,
+    p_registration_date DATE,
     p_mileage_km INT,
     p_remaining_lease DECIMAL,
     p_dealer_description TEXT,
@@ -108,7 +109,8 @@ BEGIN
             vehicle_id, 
             source_url, 
             current_price, 
-            vehicle_year, 
+            vehicle_year,
+            registration_date,
             mileage_km, 
             remaining_lease, 
             dealer_description, 
@@ -119,7 +121,8 @@ BEGIN
             p_vehicle_id, 
             p_source_url, 
             p_current_price, 
-            p_vehicle_year, 
+            p_vehicle_year,
+            p_registration_date,
             p_mileage_km, 
             p_remaining_lease, 
             p_dealer_description, 
@@ -139,6 +142,7 @@ BEGIN
         SET 
             current_price = p_current_price,
             mileage_km = p_mileage_km,
+            registration_date = p_registration_date,
             dealer_description = p_dealer_description,
             remaining_lease = p_remaining_lease,
             deal_score = p_deal_score,
@@ -162,3 +166,4 @@ BEGIN
     );
 END;
 $$;
+

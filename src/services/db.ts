@@ -6,13 +6,27 @@ import { supabase } from '@/lib/supabase';
 export function calculateDealScore(
     price: number,
     mileage: number,
+    registrationDate: string | null,
     year: number,
     remaining_lease: number | null,
     baselineMileage: number,
     baselineDepreciation: number
 ): number {
-    const currentYear = new Date().getFullYear();
-    const age = Math.max(1, currentYear - year);
+    const now = new Date();
+    let age: number;
+
+    if (registrationDate) {
+        // Parse dd-MMM-yyyy format (e.g. "15-Jan-2020")
+        const parsed = new Date(registrationDate);
+        if (!isNaN(parsed.getTime())) {
+            const ageYears = (now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+            age = Math.max(1, Math.floor(ageYears));
+        } else {
+            age = Math.max(1, now.getFullYear() - year);
+        }
+    } else {
+        age = Math.max(1, now.getFullYear() - year);
+    }
     
     // Use remaining_lease if present (COE), otherwise estimate with 10 - age
     const remainingYears = remaining_lease !== null && remaining_lease > 0 
@@ -61,6 +75,7 @@ export async function upsertListing(listingData: any) {
         p_source_url: listingData.source_url,
         p_current_price: listingData.current_price,
         p_vehicle_year: listingData.vehicle_year ? Math.round(Number(listingData.vehicle_year)) : null,
+        p_registration_date: listingData.registration_date || null,
         p_mileage_km: listingData.mileage_km ? Math.round(Number(listingData.mileage_km)) : null,
         p_remaining_lease: listingData.remaining_lease !== null ? Math.round(Number(listingData.remaining_lease)) : null,
         p_dealer_description: listingData.dealer_description,

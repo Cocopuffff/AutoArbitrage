@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AutoArbitrage Engine",
-  description: "High-Ticket Asset Arbitrage (7-Seater)",
+  description: "High-Ticket Asset Arbitrage",
 };
 
 export default function RootLayout({

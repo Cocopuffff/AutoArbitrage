@@ -44,7 +44,7 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
                     // SGCarmart specific checks. The main details are usually in the #right-container or body.
                     const overviewContainer = document.querySelector('div[class^="styles_rightContainer"]') as HTMLElement;
                     const detailsContainer = document.querySelector('div[class^="styles_infoBottomContainer"]') as HTMLElement;
-                    return (detailsContainer || overviewContainer || document.body).innerText.substring(0, 5000);
+                    return (detailsContainer || overviewContainer || document.body).innerText.substring(0, 7000);
                 });
 
                 results.push({ url, rawText });

@@ -56,10 +56,12 @@ export async function GET(request: Request) {
             const mileage = extracted.mileage || 150000;
             const year = extracted.year || new Date().getFullYear() - 8;
             const remainingLease = extracted.remaining_lease || null;
+            const registrationDate = extracted.registration_date || null;
 
             const score = calculateDealScore(
                 extracted.price,
                 mileage,
+                registrationDate,
                 year,
                 remainingLease,
                 vehicle.baseline_fuel_mileage,
@@ -71,6 +73,7 @@ export async function GET(request: Request) {
                 source_url: data.url,
                 current_price: extracted.price,
                 vehicle_year: extracted.year,
+                registration_date: registrationDate,
                 mileage_km: extracted.mileage,
                 remaining_lease: remainingLease,
                 dealer_description: extracted.description,
