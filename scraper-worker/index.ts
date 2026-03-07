@@ -93,8 +93,8 @@ async function main() {
             const result = await upsertListing(listingData);
 
             if (result && result.isNewOrDropped) {
-                if (score >= 60) {
-                    const dashboardUrl = process.env.DASHBOARD_URL || 'https://autoarbitragevercel.vercel.app/';
+                if (score >= 85) {
+                    const dashboardUrl = process.env.DASHBOARD_URL || 'https://autoarbitragedashboard.vercel.app/';
                     const msg =
                         `🚨 *High Value Alert: ${vehicle.make} ${vehicle.model}*\n` +
                         `Price: $${extracted.price.toLocaleString()}\n` +

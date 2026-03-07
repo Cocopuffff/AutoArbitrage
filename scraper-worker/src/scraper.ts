@@ -15,7 +15,6 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',   // Use /tmp instead of /dev/shm (important for low-RAM VPS)
             '--disable-gpu',
-            '--single-process',
         ],
     });
 

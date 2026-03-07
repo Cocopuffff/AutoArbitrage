@@ -78,21 +78,31 @@ For full deployment instructions, see [scraper-worker/README.md](./scraper-worke
 **Quick start:**
 
 1. Provision a **DigitalOcean Droplet** (Ubuntu 24.04, $12/mo 2GB RAM, SGP1 region).
-2. SSH in and install Node.js 20 + Playwright:
+2. SSH in, create swap space, and install Node.js 20:
 
    ```bash
+   ssh root@<your-droplet-ip>
+
+   # Create 1GB swap (required — Chromium crashes without it)
+   fallocate -l 1G /swapfile
+   chmod 600 /swapfile
+   mkswap /swapfile
+   swapon /swapfile
+   echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+   # Install Node.js 20
    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
    apt install -y nodejs
-   npx -y playwright install-deps
-   npx -y playwright install chromium
    ```
 
-3. Upload and configure:
+3. Upload the worker (from your local machine), then install dependencies on the droplet:
 
    ```bash
-   scp -r scraper-worker root@<your-ip>:/opt/scraper-worker
-   ssh root@<your-ip>
-   cd /opt/scraper-worker && npm install
+   rsync -av --exclude node_modules scraper-worker/ root@<your-droplet-ip>:/opt/scraper-worker/
+   ssh root@<your-droplet-ip>
+   cd /opt/scraper-worker
+   npm install
+   npx playwright install --force --with-deps chromium
    cp env.example .env && nano .env
    ```
 
