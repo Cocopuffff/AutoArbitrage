@@ -111,7 +111,7 @@ For full deployment instructions, see [scraper-worker/README.md](./scraper-worke
    | Variable | Description |
    | --- | --- |
    | `SUPABASE_URL` | Supabase project URL |
-   | `SUPABASE_ANON_KEY` | Supabase anon key |
+   | `SUPABASE_SECRET_KEY` | Supabase secret key |
    | `AI_PROVIDER` | `deepseek`, `google`, or `openai` |
    | `DEEPSEEK_API_KEY` | Your DeepSeek API key |
    | `TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts |

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_ANON_KEY!;
+const supabaseKey = process.env.SUPABASE_SECRET_KEY!;
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -113,4 +113,15 @@ export async function cleanFaultyDescriptions(): Promise<number> {
     }
 
     return data?.length ?? 0;
+}
+
+export async function logAlert(listingId: string, telegramMessageId: string): Promise<void> {
+    const { error } = await supabase.from('alerts_log').insert({
+        listing_id: listingId,
+        telegram_message_id: telegramMessageId,
+    });
+
+    if (error) {
+        console.error('[DB] Error logging alert:', error);
+    }
 }

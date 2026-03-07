@@ -13,7 +13,7 @@ import 'dotenv/config';
 
 import { scrapeListingsForModel } from './src/scraper';
 import { parseListingWithLLM } from './src/llm';
-import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions } from './src/db';
+import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions, logAlert } from './src/db';
 import { sendTelegramAlert } from './src/telegram';
 
 // Parse --limit argument from CLI
@@ -101,7 +101,10 @@ async function main() {
                         `Deal Score: *${score}/100*\n` +
                         `[View Listing](${data.url})\n` +
                         `[View Dashboard](${dashboardUrl})`;
-                    await sendTelegramAlert(msg);
+                    const telegramMsgId = await sendTelegramAlert(msg);
+                    if (telegramMsgId) {
+                        await logAlert(result.listingId, telegramMsgId);
+                    }
                 }
             }
 

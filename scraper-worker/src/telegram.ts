@@ -1,10 +1,13 @@
-export async function sendTelegramAlert(message: string) {
+/**
+ * Sends a Telegram alert and returns the Telegram message_id on success, or null on failure.
+ */
+export async function sendTelegramAlert(message: string): Promise<string | null> {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
     if (!token || !chatId) {
         console.warn('[Telegram] Bot token or chat ID is missing. Skipping alert.');
-        return false;
+        return null;
     }
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`;
@@ -23,11 +26,13 @@ export async function sendTelegramAlert(message: string) {
         if (!response.ok) {
             const errText = await response.text();
             console.error('[Telegram] Failed to send alert:', errText);
-            return false;
+            return null;
         }
-        return true;
+
+        const data = await response.json();
+        return String(data.result?.message_id ?? '');
     } catch (error) {
         console.error('[Telegram] Error sending alert:', error);
-        return false;
+        return null;
     }
 }
