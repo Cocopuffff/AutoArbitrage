@@ -41,11 +41,82 @@ The system uses a relational model to track historical price deltas, allowing fo
 
 ## 🚀 Setup & Deployment
 
-Detailed setup and deployment instructions for both the **Vercel Frontend** and the **DigitalOcean Scraper** can be found in the codebase and conversation artifacts.
+### 1. Supabase (Database)
 
-1. **Database:** Execute `supabase_schema.sql` in your Supabase SQL Editor.
-2. **Frontend:** Deploy the root directory to Vercel and configure variables (see `env.example`).
-3. **Scraper:** Follow the instructions in [scraper-worker/README.md](./scraper-worker/README.md) to deploy to a Linux VPS (Ubuntu 24.04 recommended).
+1. Create a free project at [supabase.com](https://supabase.com).
+2. Open the **SQL Editor** and execute the full contents of [`supabase_schema.sql`](./supabase_schema.sql). This creates:
+   - `vehicles` — target models and baselines
+   - `listings` — live market data with deal scores
+   - `price_history` — historical price tracking
+   - `upsert_listing` — RPC function for atomic insert/update
+3. Add your target vehicles to the `vehicles` table via the Table Editor or SQL:
+
+   ```sql
+   INSERT INTO vehicles (make, model, baseline_fuel_mileage, baseline_depreciation)
+   VALUES ('Toyota', 'Noah', 15000, 12000);
+   ```
+
+4. Note your **Project URL** and **Anon Key** from **Settings → API**.
+
+### 2. Vercel (Frontend)
+
+1. Fork/clone this repository.
+2. Import the project into [Vercel](https://vercel.com).
+3. Add the following environment variables in **Settings → Environment Variables**:
+
+   | Variable | Value |
+   | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon key |
+
+4. Deploy. The dashboard will be live at your Vercel URL (e.g., `https://your-app.vercel.app`).
+
+### 3. Scraper Worker (DigitalOcean)
+
+For full deployment instructions, see [scraper-worker/README.md](./scraper-worker/README.md).
+
+**Quick start:**
+
+1. Provision a **DigitalOcean Droplet** (Ubuntu 24.04, $12/mo 2GB RAM, SGP1 region).
+2. SSH in and install Node.js 20 + Playwright:
+
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+   apt install -y nodejs
+   npx -y playwright install-deps
+   npx -y playwright install chromium
+   ```
+
+3. Upload and configure:
+
+   ```bash
+   scp -r scraper-worker root@<your-ip>:/opt/scraper-worker
+   ssh root@<your-ip>
+   cd /opt/scraper-worker && npm install
+   cp env.example .env && nano .env
+   ```
+
+4. Configure the `.env` with your keys:
+
+   | Variable | Description |
+   | --- | --- |
+   | `SUPABASE_URL` | Supabase project URL |
+   | `SUPABASE_ANON_KEY` | Supabase anon key |
+   | `AI_PROVIDER` | `deepseek`, `google`, or `openai` |
+   | `DEEPSEEK_API_KEY` | Your DeepSeek API key |
+   | `TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts |
+   | `TELEGRAM_CHAT_ID` | Telegram chat ID to receive alerts |
+   | `SCRAPE_LIMIT` | Max listings per vehicle per run (default: 5) |
+   | `DASHBOARD_URL` | Your Vercel dashboard URL |
+
+5. Test run: `npx ts-node index.ts --limit 1`
+6. Set up a cron job to run every 6 hours:
+
+   ```bash
+   crontab -e
+   # Add:
+   0 */6 * * * cd /opt/scraper-worker && /usr/bin/npx ts-node index.ts >> /var/log/scraper.log 2>&1
+   ```
 
 ## 💰 Estimated Monthly Cost
 
