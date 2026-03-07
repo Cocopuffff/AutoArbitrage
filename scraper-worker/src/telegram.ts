@@ -3,7 +3,7 @@ export async function sendTelegramAlert(message: string) {
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
     if (!token || !chatId) {
-        console.warn("Telegram bot token or chat ID is missing. Skipping alert.");
+        console.warn('[Telegram] Bot token or chat ID is missing. Skipping alert.');
         return false;
     }
 
@@ -11,23 +11,23 @@ export async function sendTelegramAlert(message: string) {
 
     try {
         const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 chat_id: chatId,
                 text: message,
-                parse_mode: "Markdown",
+                parse_mode: 'Markdown',
             }),
         });
 
         if (!response.ok) {
             const errText = await response.text();
-            console.error("Failed to send Telegram alert:", errText);
+            console.error('[Telegram] Failed to send alert:', errText);
             return false;
         }
         return true;
     } catch (error) {
-        console.error("Error sending Telegram alert:", error);
+        console.error('[Telegram] Error sending alert:', error);
         return false;
     }
 }

@@ -19,17 +19,19 @@ export type ExtractedVehicleData = z.infer<typeof VehicleDataSchema>;
 function getModel() {
     const provider = process.env.AI_PROVIDER || 'google';
     switch (provider) {
-        case 'google':
+        case 'google': {
             const google = createGoogleGenerativeAI({
                 apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
             });
             return google('gemini-2.5-flash');
-        case 'openai':
+        }
+        case 'openai': {
             const openai = createOpenAI({
                 apiKey: process.env.OPENAI_API_KEY || '',
             });
             return openai('gpt-4o');
-        case 'deepseek':
+        }
+        case 'deepseek': {
             const deepseek = createDeepSeek({
                 apiKey: process.env.DEEPSEEK_API_KEY || '',
                 headers: {
@@ -37,6 +39,7 @@ function getModel() {
                 }
             });
             return deepseek('deepseek-chat');
+        }
     }
     throw new Error(`Unsupported AI provider: ${provider}`);
 }
@@ -68,7 +71,7 @@ export async function parseListingWithLLM(rawText: string, url: string): Promise
 
         return output;
     } catch (error) {
-        console.error(`Failed to parse listing with LLM for ${url}:`, error);
+        console.error(`[LLM] Failed to parse listing for ${url}:`, error);
         return null;
     }
 }
