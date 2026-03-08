@@ -125,3 +125,52 @@ export async function logAlert(listingId: string, telegramMessageId: string): Pr
         console.error('[DB] Error logging alert:', error);
     }
 }
+
+export async function getStaleListings(): Promise<{ id: string; source_url: string; vehicle_id: string }[]> {
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+        .from('listings')
+        .select('id, source_url, vehicle_id')
+        .eq('status', 'ACTIVE')
+        .lt('updated_at', sixHoursAgo);
+
+    if (error) {
+        console.error('[DB] Error fetching stale listings:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+export async function markListingAsDelisted(listingId: string): Promise<void> {
+    const { error } = await supabase
+        .from('listings')
+        .update({ status: 'DELISTED', updated_at: new Date().toISOString() })
+        .eq('id', listingId);
+
+    if (error) {
+        console.error('[DB] Error marking listing as delisted for id', listingId, ':', error);
+    }
+}
+
+export async function updateListingUrl(listingId: string, newUrl: string): Promise<void> {
+    const { error } = await supabase
+        .from('listings')
+        .update({ source_url: newUrl })
+        .eq('id', listingId);
+
+    if (error) {
+        console.error('[DB] Error updating source_url for listing', listingId, ':', error);
+    }
+}
+
+export async function markListingAsSold(listingId: string): Promise<void> {
+    const { error } = await supabase
+        .from('listings')
+        .update({ status: 'SOLD', updated_at: new Date().toISOString() })
+        .eq('id', listingId);
+
+    if (error) {
+        console.error('[DB] Error marking listing as sold for id', listingId, ':', error);
+    }
+}

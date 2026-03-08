@@ -106,6 +106,7 @@ export default function Dashboard() {
     const { data, error } = await supabase
       .from('listings')
       .select('*, vehicles(make, model)')
+      .eq('status', 'ACTIVE')
       .order('deal_score', { ascending: false });
 
     if (data) setListings(data);
@@ -144,6 +145,9 @@ export default function Dashboard() {
     setHistory([]);
   }
 
+  const isLive = listings.length > 0 && 
+                 (new Date().getTime() - Math.max(...listings.map(l => new Date(l.updated_at).getTime()))) < (6.5 * 60 * 60 * 1000);
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-4 sm:p-8 font-sans">
       <header className="mb-6 sm:mb-10 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 border-b border-gray-800 pb-4 sm:pb-6">
@@ -154,7 +158,11 @@ export default function Dashboard() {
           <p className="text-gray-400 mt-1 sm:mt-2 text-sm sm:text-base">Real-Time High-Ticket Asset Tracker (7-Seater Arbitrage)</p>
         </div>
         <div className="text-xs sm:text-sm font-medium text-gray-500 bg-gray-900 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-gray-800 shadow-inner w-fit">
-          <span className="animate-pulse mr-2 text-emerald-400">●</span> Live Monitoring Active
+          {isLive ? (
+            <><span className="animate-pulse mr-2 text-emerald-400">●</span> Live</>
+          ) : (
+            <><span className="mr-2 text-red-500">●</span> Inactive</>
+          )}
         </div>
       </header>
 
@@ -185,7 +193,7 @@ export default function Dashboard() {
                     {/* Score Badge */}
                     <div className="absolute top-4 right-4">
                       <div className={`text-xs font-bold px-3 py-1 rounded-full ${l.deal_score >= 85 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-800 text-gray-400'}`}>
-                        {l.deal_score} SCR
+                        {l.deal_score} Score
                       </div>
                     </div>
 
@@ -197,8 +205,15 @@ export default function Dashboard() {
                         <span className="text-xs font-medium mr-1 text-gray-500">SGD</span>
                         <span className="text-2xl font-bold font-mono tracking-tight">{l.current_price.toLocaleString()}</span>
                       </div>
-                      <div className="text-xs text-gray-500 italic text-right">
-                        {l.mileage_km ? `${(l.mileage_km / 1000).toFixed(1)}k km` : 'N/A km'}
+                      <div className="text-xs text-gray-500 italic text-right space-y-1">
+                        <div>{l.mileage_km ? `${(l.mileage_km / 1000).toFixed(1)}k km` : 'N/A km'}</div>
+                        {l.remaining_lease !== null && l.remaining_lease > 0 && (
+                          <div className="text-emerald-500/80">
+                            {Math.floor(l.remaining_lease / 12) > 0 && `${Math.floor(l.remaining_lease / 12)}y `}
+                            {Math.round(l.remaining_lease % 12) > 0 && `${Math.round(l.remaining_lease % 12)}m `}
+                            COE
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

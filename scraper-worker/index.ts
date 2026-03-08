@@ -11,9 +11,9 @@
 
 import 'dotenv/config';
 
-import { scrapeListingsForModel } from './src/scraper';
+import { scrapeListingsForModel, scrapeIndividualLinks } from './src/scraper';
 import { parseListingWithLLM } from './src/llm';
-import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions, logAlert } from './src/db';
+import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions, logAlert, getStaleListings, markListingAsDelisted, updateListingUrl, markListingAsSold } from './src/db';
 import { sendTelegramAlert } from './src/telegram';
 
 // Parse --limit argument from CLI
@@ -109,6 +109,88 @@ async function main() {
             }
 
             resultsSummary.push({ url: data.url, score, isNewOrDropped: result?.isNewOrDropped });
+        }
+    }
+
+    // Process Stale Listings (older than 6 hours)
+    const staleListings = await getStaleListings();
+    if (staleListings.length > 0) {
+        console.log(`\n[Main] Found ${staleListings.length} stale listings to refresh...`);
+        const staleUrls = staleListings.map(l => l.source_url);
+        
+        // Chunk them into limits to respect VPS memory
+        for (let i = 0; i < staleUrls.length; i += limit) {
+            const chunk = staleUrls.slice(i, i + limit);
+            const refreshResults = await scrapeIndividualLinks(chunk);
+
+            for (const r of refreshResults) {
+                const dbListing = staleListings.find(l => l.source_url === r.url);
+                if (!dbListing) continue;
+
+                if (r.isDead) {
+                    console.log(`[Main] Marking ${r.url} as DELISTED.`);
+                    await markListingAsDelisted(dbListing.id);
+                    continue;
+                }
+
+                if (r.isSold) {
+                    console.log(`[Main] Marking ${r.url} as SOLD.`);
+                    await markListingAsSold(dbListing.id);
+                    continue;
+                }
+
+                if (!r.rawText) {
+                    console.log(`[Main] Could not extract text for ${r.url}, skipping...`);
+                    continue;
+                }
+
+                // If the server returned a canonical URL, update it in the DB first
+                if (r.actualUrl !== r.url) {
+                    console.log(`[Main] Updating source_url: ${r.url} → ${r.actualUrl}`);
+                    await updateListingUrl(dbListing.id, r.actualUrl);
+                }
+
+                const extracted = await parseListingWithLLM(r.rawText, r.actualUrl);
+                if (!extracted || !extracted.price) {
+                     console.log(`[Main] LLM failed to parse data for ${r.actualUrl}, skipping...`);
+                     continue;
+                }
+
+                // Need base vehicle data for scoring
+                const vehicle = vehicles.find(v => v.id === dbListing.vehicle_id);
+                if (!vehicle) continue;
+
+                // Re-calculate and insert as usual to update timestamps
+                const mileage = extracted.mileage || 150000;
+                const year = extracted.year || new Date().getFullYear() - 8;
+                const remainingLease = extracted.remaining_lease || null;
+                const registrationDate = extracted.registration_date || null;
+
+                const score = calculateDealScore(
+                    extracted.price,
+                    mileage,
+                    registrationDate,
+                    year,
+                    remainingLease,
+                    vehicle.baseline_fuel_mileage,
+                    vehicle.baseline_depreciation
+                );
+
+                const listingData = {
+                    vehicle_id: vehicle.id,
+                    source_url: r.actualUrl,
+                    current_price: extracted.price,
+                    vehicle_year: extracted.year,
+                    registration_date: registrationDate,
+                    mileage_km: extracted.mileage,
+                    remaining_lease: remainingLease,
+                    dealer_description: extracted.description,
+                    deal_score: score,
+                };
+
+                await upsertListing(listingData);
+                console.log(`[Main] Refreshed active listing ${r.actualUrl}`);
+            }
         }
     }
 

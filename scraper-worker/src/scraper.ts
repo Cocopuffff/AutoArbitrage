@@ -46,13 +46,15 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
                 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
                 const rawText = await page.evaluate(() => {
+                    // Priority 1: The structured details list (Price, Reg Date, Mileage, Description, etc.)
+                    const detailsList = document.querySelector(
+                        'div[class^="styles_containerDetailsList"]'
+                    ) as HTMLElement;
+                    // Fallback selectors for older page layouts
                     const overviewContainer = document.querySelector(
                         'div[class^="styles_rightContainer"]'
                     ) as HTMLElement;
-                    const detailsContainer = document.querySelector(
-                        'div[class^="styles_infoBottomContainer"]'
-                    ) as HTMLElement;
-                    return (detailsContainer || overviewContainer || document.body).innerText.substring(0, 7000);
+                    return (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
                 });
 
                 results.push({ url, rawText });
@@ -62,6 +64,119 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
         }
     } catch (e) {
         console.error(`[Scraper] Error navigating to search URL ${searchUrl}:`, e);
+    } finally {
+        await browser.close();
+    }
+
+    return results;
+}
+
+/**
+ * Visits specific listing URLs to check if they are still active.
+ * Extracts text if active, or flags them as dead if redirected/removed.
+ */
+export async function scrapeIndividualLinks(urls: string[]) {
+    if (urls.length === 0) return [];
+    
+    console.log(`\n[Scraper] Starting stale check for ${urls.length} individual links.`);
+    const browser = await chromium.launch({
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+        ],
+    });
+
+    const context = await browser.newContext({
+        userAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    });
+
+    const page = await context.newPage();
+    const results: { url: string; actualUrl: string; rawText: string | null; isDead: boolean; isSold: boolean }[] = [];
+
+    try {
+        for (const url of urls) {
+            try {
+                const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                // Wait for React/SPA to finish rendering (same as main scraper)
+                await page.waitForTimeout(2000);
+                const currentUrl = page.url();
+                
+                // Detection 1: Redirected away from the listing page entirely
+                if (!currentUrl.includes('info.php') && !currentUrl.includes('/info/')) {
+                    console.log(`[Scraper] Listing ${url} redirected to ${currentUrl} — assuming delisted.`);
+                    results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
+                    continue;
+                }
+
+                // Detection 2: Check if URL genuinely changed to a different car model
+                // Normalize both URLs (strip trailing slashes) to avoid false positives
+                const normalize = (u: string) => {
+                    try {
+                        const parsed = new URL(u);
+                        parsed.pathname = parsed.pathname.replace(/\/$/, '');
+                        return parsed.toString();
+                    } catch { return u; }
+                };
+
+                const normalizedOriginal = normalize(url);
+                const normalizedCurrent = normalize(currentUrl);
+                
+                if (normalizedOriginal !== normalizedCurrent) {
+                    // URL genuinely changed — a different car or old-format redirect
+                    console.log(`[Scraper] Listing ${url} redirected to ${currentUrl} — marking as delisted.`);
+                    results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
+                    continue;
+                }
+
+                // Detection 3: 404 status
+                if (response && response.status() === 404) {
+                    console.log(`[Scraper] Listing ${url} returned 404 — assuming delisted.`);
+                    results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
+                    continue;
+                }
+
+                // Detection 4: Check for specific "sold" or "delisted" text on the page
+                const isDead = await page.evaluate(() => {
+                    const bodyText = document.body.innerText.toLowerCase();
+                    return bodyText.includes('listing is no longer available') || 
+                           bodyText.includes('listing has been removed') ||
+                           bodyText.includes('already sold');
+                });
+
+                if (isDead) {
+                    console.log(`[Scraper] Listing ${url} text indicates it is removed — assuming delisted.`);
+                    results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
+                    continue;
+                }
+
+                // Extract normal text if active
+                const rawText = await page.evaluate(() => {
+                    const detailsList = document.querySelector('div[class^="styles_containerDetailsList"]') as HTMLElement;
+                    const overviewContainer = document.querySelector('div[class^="styles_rightContainer"]') as HTMLElement;
+                    return (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
+                });
+
+                // Detection 5: Check if price field shows "Sold"
+                if (rawText && rawText.includes('Price\nSold')) {
+                    console.log(`[Scraper] Listing ${url} has Price=Sold — marking as sold.`);
+                    results.push({ url, actualUrl: currentUrl, rawText: null, isDead: false, isSold: true });
+                    continue;
+                }
+
+                // If the URL was slightly different (e.g. trailing slash removed), use the canonical version
+                if (currentUrl !== url) {
+                    console.log(`[Scraper] URL normalized: ${url} → ${currentUrl}`);
+                }
+                results.push({ url, actualUrl: currentUrl, rawText, isDead: false, isSold: false });
+            } catch (e) {
+                console.error(`[Scraper] Error scraping individual listing ${url}:`, e);
+                results.push({ url, actualUrl: url, rawText: null, isDead: false, isSold: false });
+            }
+        }
     } finally {
         await browser.close();
     }
