@@ -206,11 +206,10 @@ export default function Dashboard() {
                         <span className="text-2xl font-bold font-mono tracking-tight">{l.current_price.toLocaleString()}</span>
                       </div>
                       <div className="text-xs text-gray-500 italic text-right space-y-1">
-                        <div>{l.mileage_km ? `${(l.mileage_km / 1000).toFixed(1)}k km` : 'N/A km'}</div>
+                        <div>{l.mileage_km ? `${(l.mileage_km / 1000).toFixed(0)}k km` : 'N/A km'}</div>
                         {l.remaining_lease !== null && l.remaining_lease > 0 && (
                           <div className="text-emerald-500/80">
-                            {Math.floor(l.remaining_lease / 12) > 0 && `${Math.floor(l.remaining_lease / 12)}y `}
-                            {Math.round(l.remaining_lease % 12) > 0 && `${Math.round(l.remaining_lease % 12)}m `}
+                            {l.remaining_lease && l.remaining_lease > 0 && `${l.remaining_lease}y `}
                             COE
                           </div>
                         )}

@@ -31,6 +31,21 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
         // Wait for React/SPA to finish rendering client-side components
         await page.waitForTimeout(2000);
 
+        if (limit > 20) {
+            // Select 60 results per page (default is 20)
+            try {
+                const dropdownToggle = page.locator('div[class*="resultPerPageDropdown"] button');
+                if (await dropdownToggle.isVisible({ timeout: 3000 })) {
+                    await dropdownToggle.click();
+                    await page.locator('a[data-value="60"]').click();
+                    console.log('[Scraper] Selected 60 results per page.');
+                    await page.waitForTimeout(3000);
+                }
+            } catch (e) {
+                console.warn('[Scraper] Could not change results per page, proceeding with default.', e);
+            }
+        }
+
         // Grab all links that look like individual car listing detail pages
         const links = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('a'))

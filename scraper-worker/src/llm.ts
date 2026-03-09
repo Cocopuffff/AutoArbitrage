@@ -23,7 +23,7 @@ function getModel() {
             const google = createGoogleGenerativeAI({
                 apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
             });
-            return google('gemini-2.5-flash');
+            return google('gemini-flash-lite-latest');
         }
         case 'openai': {
             const openai = createOpenAI({
@@ -56,10 +56,10 @@ export async function parseListingWithLLM(rawText: string, url: string): Promise
       Your job is to extract the following fields into valid JSON:
       - price: asking price in SGD (number)
       - mileage: mileage in km (number or null)
-      - year: manufacturing year, typically shown after make and model (number or null)
+      - year: manufacturing year, typically shown after "Manufactured" or make and model (number or null)
       - registration_date: the "Reg Date" field in dd-MMM-yyyy format e.g. "15-Jan-2020" (string or null)
       - parf_rebate: PARF rebate amount if shown (number or null)
-      - remaining_lease: remaining COE/lease years rounded to nearest integer (number or null)
+      - remaining_lease: remaining COE/lease years rounded to nearest integer eg. 9yrs 11mths 3days COE left (number or null)
       - description: the full dealer description or notes
       
       URL: ${url}
