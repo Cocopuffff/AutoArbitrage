@@ -98,7 +98,7 @@ export function parseListingText(rawText: string): ParsedListing | null {
         // --- Mileage ---
         // Pattern: "Mileage" followed by "37 km"
         if (line === 'Mileage' && nextLine) {
-            const mileageMatch = nextLine.replace(/,/g, '').match(/^([\d]+)\s*km$/i);
+            const mileageMatch = nextLine.replace(/,/g, '').match(/^([\d]+)\s*km/i);
             if (mileageMatch) {
                 mileage = parseInt(mileageMatch[1], 10);
             }
