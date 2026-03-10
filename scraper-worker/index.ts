@@ -12,6 +12,7 @@
 import 'dotenv/config';
 
 import { scrapeListingsForModel, scrapeIndividualLinks } from './src/scraper';
+import { parseListingText } from './src/parser';
 import { parseListingWithLLM } from './src/llm';
 import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions, logAlert, getStaleListings, markListingAsDelisted, updateListingUrl, markListingAsSold } from './src/db';
 import { sendTelegramAlert } from './src/telegram';
@@ -56,10 +57,16 @@ async function main() {
         const listings = await scrapeListingsForModel(searchUrl, limit);
 
         for (const data of listings) {
-            const extracted = await parseListingWithLLM(data.rawText, data.url);
+            // Try deterministic parser first
+            let extracted = parseListingText(data.rawText);
+
+            if (!extracted) {
+                console.log(`[Main] Deterministic parser failed for ${data.url}, falling back to LLM...`);
+                extracted = await parseListingWithLLM(data.rawText, data.url);
+            }
 
             if (!extracted || !extracted.price) {
-                console.log(`[Main] Skipping ${data.url} — AI could not extract price.`);
+                console.log(`[Main] Skipping ${data.url} — could not extract price.`);
                 continue;
             }
 
@@ -150,9 +157,14 @@ async function main() {
                     await updateListingUrl(dbListing.id, r.actualUrl);
                 }
 
-                const extracted = await parseListingWithLLM(r.rawText, r.actualUrl);
+                // Try deterministic parser first, LLM fallback
+                let extracted = parseListingText(r.rawText);
+                if (!extracted) {
+                    console.log(`[Main] Deterministic parser failed for ${r.actualUrl}, falling back to LLM...`);
+                    extracted = await parseListingWithLLM(r.rawText, r.actualUrl);
+                }
                 if (!extracted || !extracted.price) {
-                     console.log(`[Main] LLM failed to parse data for ${r.actualUrl}, skipping...`);
+                     console.log(`[Main] Could not parse data for ${r.actualUrl}, skipping...`);
                      continue;
                 }
 
