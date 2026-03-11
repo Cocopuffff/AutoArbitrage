@@ -20,18 +20,33 @@ export type ExtractedVehicleData = z.infer<typeof VehicleDataSchema>;
 
 import { ParsedListing } from './parser';
 
+const customFetch = async (url: URL | RequestInfo, options?: RequestInit) => {
+    if (process.env.DEBUG_LLM_PAYLOAD === 'true' && options?.body) {
+        console.log(`\n========== LLM PAYLOAD OUTGOING TO ${url.toString()} ==========`);
+        try {
+            console.log(JSON.stringify(JSON.parse(options.body as string), null, 2));
+        } catch {
+            console.log(options.body); // Fallback if it's not JSON
+        }
+        console.log(`====================================================\n`);
+    }
+    return fetch(url, options);
+};
+
 function getModel() {
     const provider = process.env.AI_PROVIDER || 'google';
     switch (provider) {
         case 'google': {
             const google = createGoogleGenerativeAI({
                 apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '',
+                fetch: customFetch,
             });
             return google('gemini-flash-lite-latest');
         }
         case 'openai': {
             const openai = createOpenAI({
                 apiKey: process.env.OPENAI_API_KEY || '',
+                fetch: customFetch,
             });
             return openai('gpt-4o');
         }
@@ -40,7 +55,8 @@ function getModel() {
                 apiKey: process.env.DEEPSEEK_API_KEY || '',
                 headers: {
                     'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
-                }
+                },
+                fetch: customFetch,
             });
             return deepseek('deepseek-chat');
         }
