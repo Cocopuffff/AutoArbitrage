@@ -6,8 +6,8 @@ import { chromium } from 'playwright';
  *   - Single browser instance, single page (re-navigated for each listing)
  *   - Browser is always closed in `finally` to prevent leaked processes
  */
-export async function scrapeListingsForModel(searchUrl: string, limit: number = 5) {
-    console.log(`[Scraper] Starting scrape for ${searchUrl} (limit ${limit})`);
+export async function scrapeListingsForModel(searchUrl: string, expectedModel: string, limit: number = 5) {
+    console.log(`[Scraper] Starting scrape for ${searchUrl} (limit ${limit}, expected: ${expectedModel})`);
     const browser = await chromium.launch({
         headless: true,
         args: [
@@ -60,7 +60,12 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
             try {
                 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
-                const rawText = await page.evaluate(() => {
+                const extractionResult = await page.evaluate((expected) => {
+                    // Priority 1: Check the H1 title to ensure it matches the model
+                    const h1 = document.querySelector('h1[class*="styles_title"]') as HTMLElement;
+                    const title = h1?.innerText || '';
+                    const isMismatch = title && !title.toLowerCase().includes(expected.toLowerCase());
+
                     // Priority 1: The structured details list (Price, Reg Date, Mileage, Description, etc.)
                     const detailsList = document.querySelector(
                         'div[class^="styles_containerDetailsList"]'
@@ -69,10 +74,18 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
                     const overviewContainer = document.querySelector(
                         'div[class^="styles_rightContainer"]'
                     ) as HTMLElement;
-                    return (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
-                });
+                    
+                    const rawText = (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
+                    
+                    return { rawText, isMismatch, title };
+                }, expectedModel);
 
-                results.push({ url, rawText });
+                if (extractionResult.isMismatch) {
+                    console.log(`[Scraper] Skipping ${url} — h1 title "${extractionResult.title}" does not contain expected model "${expectedModel}".`);
+                    continue;
+                }
+
+                results.push({ url, rawText: extractionResult.rawText });
             } catch (e) {
                 console.error(`[Scraper] Error scraping individual listing ${url}:`, e);
             }
@@ -90,10 +103,10 @@ export async function scrapeListingsForModel(searchUrl: string, limit: number = 
  * Visits specific listing URLs to check if they are still active.
  * Extracts text if active, or flags them as dead if redirected/removed.
  */
-export async function scrapeIndividualLinks(urls: string[]) {
-    if (urls.length === 0) return [];
+export async function scrapeIndividualLinks(items: { url: string; expectedModel: string }[]) {
+    if (items.length === 0) return [];
     
-    console.log(`\n[Scraper] Starting stale check for ${urls.length} individual links.`);
+    console.log(`\n[Scraper] Starting stale check for ${items.length} individual links.`);
     const browser = await chromium.launch({
         headless: true,
         args: [
@@ -113,7 +126,8 @@ export async function scrapeIndividualLinks(urls: string[]) {
     const results: { url: string; actualUrl: string; rawText: string | null; isDead: boolean; isSold: boolean }[] = [];
 
     try {
-        for (const url of urls) {
+        for (const item of items) {
+            const { url, expectedModel } = item;
             try {
                 const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
                 // Wait for React/SPA to finish rendering (same as main scraper)
@@ -164,6 +178,23 @@ export async function scrapeIndividualLinks(urls: string[]) {
 
                 if (isDead) {
                     console.log(`[Scraper] Listing ${url} text indicates it is removed — assuming delisted.`);
+                    results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
+                    continue;
+                }
+
+                // Detection 5: Check if H1 exists and matches expected model
+                const titleCheck = await page.evaluate((expected) => {
+                    const h1 = document.querySelector('h1[class*="styles_title"]') as HTMLElement;
+                    const titleText = h1?.innerText || '';
+                    if (!titleText) return { isMismatch: false }; // Can't see title, keep going
+                    return { 
+                        isMismatch: !titleText.toLowerCase().includes(expected.toLowerCase()),
+                        title: titleText
+                    };
+                }, expectedModel);
+
+                if (titleCheck.isMismatch) {
+                    console.log(`[Scraper] Listing ${url} title mismatch ("${titleCheck.title}" vs "${expectedModel}") — marking as delisted.`);
                     results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
                     continue;
                 }

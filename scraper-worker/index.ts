@@ -54,7 +54,8 @@ async function main() {
 
         console.log(`[Main] Processing ${vehicle.make} ${vehicle.model}...`);
 
-        const listings = await scrapeListingsForModel(searchUrl, limit);
+        const expectedModel = `${vehicle.make} ${vehicle.model}`;
+        const listings = await scrapeListingsForModel(searchUrl, expectedModel, limit);
 
         for (const data of listings) {
             // Try deterministic parser first
@@ -127,8 +128,16 @@ async function main() {
         
         // Chunk them into limits to respect VPS memory
         for (let i = 0; i < staleUrls.length; i += limit) {
-            const chunk = staleUrls.slice(i, i + limit);
-            const refreshResults = await scrapeIndividualLinks(chunk);
+            const chunkUrls = staleUrls.slice(i, i + limit);
+            const chunkItems = chunkUrls.map(url => {
+                const dbListing = staleListings.find(l => l.source_url === url);
+                const veh = vehicles.find(v => v.id === dbListing?.vehicle_id);
+                return { 
+                    url, 
+                    expectedModel: veh ? `${veh.make} ${veh.model}` : ''
+                };
+            });
+            const refreshResults = await scrapeIndividualLinks(chunkItems);
 
             for (const r of refreshResults) {
                 const dbListing = staleListings.find(l => l.source_url === r.url);
