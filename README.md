@@ -1,43 +1,80 @@
 # 🚗 AutoArbitrage
 
-An Autonomous Agentic ETL Pipeline for High-Value Asset Tracking
+*An automated data pipeline for real-time market analysis, leveraging a distributed architecture for cost-efficient intelligence capability.*
 
-AutoArbitrage is a data pipeline designed to monitor the Singapore automotive market for specific 7-seater hybrid models (Mitsubishi Outlander, Toyota Noah, Nissan Serena, Honda Stepwgn). It bypasses the "messy web" by combining headless browser scraping with LLM-powered data extraction and a deterministic valuation engine.
+AutoArbitrage is a purpose-built data pipeline designed to monitor the Singapore automotive market for specific 7-seater hybrid vehicles (Mitsubishi Outlander, Toyota Noah, Nissan Serena, Honda Stepwgn). By marrying headless browser automation with LLM-powered data extraction, it transforms the "messy web" of classified ads into a structured, highly deterministic valuation engine and real-time alerting system.
 
-## 🏗️ The Architecture
+## 🏗️ Architecture & Data Pipeline
 
-The system follows a strict Extract, Transform, Load (ETL) pattern to ensure data integrity and cost-efficiency (~$12/month).
+The system implements a robust Extract, Transform, Load (ETL) architecture to ensure continuous data integrity while maintaining strict cost-efficiency (operationally under $15/month).
 
-- **Ingestion (Extract):** A standalone Node.js scraper (`scraper-worker`) running on a **DigitalOcean Droplet (2GB RAM)** crawls local listing portals (SGCarMart) every 6 hours using Playwright.
-- **The Agentic Brain (Transform):** Raw HTML/Text is processed by **DeepSeek / Gemini 2.5 Flash**. The LLM acts as a high-speed parser to return strict JSON, extracting price, mileage, manufacturing year, and precise **Registration Date (Reg Date)**.
-- **The Valuation Engine (Score):** A TypeScript function applies a weighted mathematical formula, utilizing the exact **Registration Date** to calculate vehicle age and derive a Deal Score (0-100).
-- **State Management (Load):** Data is persisted in **Supabase (PostgreSQL)**. If a price drop is detected, a new record is created in the `price_history` table.
-- **Alerting:** If Deal Score ≥ 85, a Telegram Bot pings the user with a direct link and a value breakdown.
+- **Data Ingestion (Extract):** A fault-tolerant Node.js worker (`scraper-worker`) running on a **DigitalOcean Droplet** orchestrates web crawling via Playwright, pulling live supply data from local listing portals on scheduled intervals.
+- **AI-Powered Transformation:** Raw unstructured text/HTML is passed through **DeepSeek / Gemini 2.5 Flash**. The LLM operates primarily as a high-speed deterministic data parser, strictly enforcing JSON schema extraction for fields like price, mileage, and registration dates without generation drift.
+- **Valuation Engine (Business Logic):** A TypeScript-based decision engine applies a weighted mathematical formula based on live data and exact registration dates to derive a normalized **Deal Score (0-100)** for every asset.
+- **State Management (Load):** Normalized data is securely persisted in **Supabase (PostgreSQL)**. Time-series price tracking is handled via an append-only `price_history` table to monitor delta shifts and arbitrage opportunities.
+- **Event-Driven Alerting:** When the Valuation Engine flags a Deal Score ≥ 85, a Telegram Bot pushes an immediate, actionable alert to the end-user with a complete value breakdown and direct asset link.
 
-## 🛠️ Tech Stack
+## 🛠️ Technology Stack
 
-- **Frontend:** Next.js 16 (App Router) / Tailwind CSS (Deployed on Vercel)
-- **Scraper:** Standalone Node.js + Playwright (Headless Chromium) (Deployed on DigitalOcean)
-- **Database:** Supabase (PostgreSQL + RLS)
-- **AI Inference:** DeepSeek / Google Gemini 2.5 Flash (via AI SDK)
-- **Alerts:** Telegram Bot API
-- **Visualization:** Recharts.js
+**Frontend & Visualization**
+- Next.js 16 (App Router) & Tailwind CSS (Deployed on Vercel)
+- Recharts.js for time-series and metric visualization
 
-## 📊 Database Schema
+**Backend & Data Engineering**
+- Standalone Node.js + Playwright (Headless Chromium on DigitalOcean)
+- Supabase (PostgreSQL) with Row Level Security (RLS) policies
 
-The system uses a relational model to track historical price deltas, allowing for "Price Drop" alerts.
+**AI & Integrations**
+- Vercel AI SDK integration mapping to DeepSeek and Google Gemini 2.5 Flash
+- Telegram Bot API for event notifications
 
-| Table | Key Fields | Purpose |
-| --- | --- | --- |
-| vehicles | make, model, baseline_depreciation | Master list of tracked models. |
-| listings | current_price, registration_date, deal_score | Current state of active market ads. |
-| price_history | listing_id, price, recorded_at | Tracking price fluctuations over time. |
+## 💰 Unit Economics & Operating Costs
+
+A key design principle of AutoArbitrage was decoupling the compute-heavy headless browsing (DigitalOcean) from the intelligence layer (serverless AI APIs) to achieve highly optimized unit economics.
+
+### 1. Compute Infrastructure (DigitalOcean)
+
+- **Basic Droplet** (2GB RAM, 1 CPU, 50GB SSD)
+- Dedicated environment to ensure sufficient memory for Playwright headless execution.
+- **Cost: $12.00 / month**
+
+### 2. AI Inference API (`deepseek-chat`)
+
+Leveraging highly efficient token pricing models ($0.27 - $0.28 per 1M Input tokens, $0.42 per 1M Output tokens):
+
+- **Workload Assumptions:**
+  - 25 listings scraped every 6 hours = **100 listings/day** = **3,000 listings/month**.
+  - Input strings (7,000 char scrape limit + prompt) ≈ **2,000 input tokens per listing**.
+  - JSON Output payload ≈ **150 output tokens per listing**.
+
+- **Token Math:**
+  - Input Tokens/Month: 3,000 × 2,000 = **6M tokens** ($0.28 \* 6 = **$1.68**)
+  - Output Tokens/Month: 3,000 × 150 = **0.45M tokens** ($0.42 \* 0.45 = **$0.19**)
+
+- **Cost: ~$1.87 / month**
+
+### 3. Frontend & Database (Vercel & Supabase)
+
+- **Vercel:** Lean deployment configuration limits usage entirely within the free Hobby Tier.
+- **Supabase:** Database usage operates entirely within the free Starter Tier.
+
+### **Total Operating Cost: ~$13.87 / month**
+
+## 📊 Relational Data Schema
+
+The system relies on a clean relational model to construct historical pricing deltas and enable automated "Price Drop" alerts.
+
+| Table         | Key Fields                                   | Purpose                                |
+| ------------- | -------------------------------------------- | -------------------------------------- |
+| `vehicles`      | make, model, baseline_depreciation           | Master taxonomy of tracked assets.         |
+| `listings`      | current_price, registration_date, deal_score | Current state representation of market inventory.    |
+| `price_history` | listing_id, price, recorded_at               | Time-series tracking for price fluctuation analysis. |
 
 ## 🛠️ Project Structure
 
 - `/src`: Next.js frontend and shared types/logic.
-- `/scraper-worker`: Standalone Node.js project for the Linux VPS.
-- `supabase_schema.sql`: Database schema and `upsert_listing` RPC.
+- `/scraper-worker`: Standalone Node.js project targeting Linux VPS environments.
+- `supabase_schema.sql`: Database schema definition and `upsert_listing` RPC.
 
 ## 🚀 Setup & Deployment
 
@@ -64,10 +101,10 @@ The system uses a relational model to track historical price deltas, allowing fo
 2. Import the project into [Vercel](https://vercel.com).
 3. Add the following environment variables in **Settings → Environment Variables**:
 
-   | Variable | Value |
-   | --- | --- |
-   | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon key |
+   | Variable                        | Value                     |
+   | ------------------------------- | ------------------------- |
+   | `NEXT_PUBLIC_SUPABASE_URL`      | Your Supabase project URL |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon key    |
 
 4. Deploy. The dashboard will be live at your Vercel URL (e.g., `https://your-app.vercel.app`).
 
@@ -108,16 +145,16 @@ For full deployment instructions, see [scraper-worker/README.md](./scraper-worke
 
 4. Configure the `.env` with your keys:
 
-   | Variable | Description |
-   | --- | --- |
-   | `SUPABASE_URL` | Supabase project URL |
-   | `SUPABASE_SECRET_KEY` | Supabase secret key |
-   | `AI_PROVIDER` | `deepseek`, `google`, or `openai` |
-   | `DEEPSEEK_API_KEY` | Your DeepSeek API key |
-   | `TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts |
-   | `TELEGRAM_CHAT_ID` | Telegram chat ID to receive alerts |
-   | `SCRAPE_LIMIT` | Max listings per vehicle per run (default: 5) |
-   | `DASHBOARD_URL` | Your Vercel dashboard URL |
+   | Variable              | Description                                   |
+   | --------------------- | --------------------------------------------- |
+   | `SUPABASE_URL`        | Supabase project URL                          |
+   | `SUPABASE_SECRET_KEY` | Supabase secret key                           |
+   | `AI_PROVIDER`         | `deepseek`, `google`, or `openai`             |
+   | `DEEPSEEK_API_KEY`    | Your DeepSeek API key                         |
+   | `TELEGRAM_BOT_TOKEN`  | Telegram bot token for alerts                 |
+   | `TELEGRAM_CHAT_ID`    | Telegram chat ID to receive alerts            |
+   | `SCRAPE_LIMIT`        | Max listings per vehicle per run (default: 5) |
+   | `DASHBOARD_URL`       | Your Vercel dashboard URL                     |
 
 5. Test run: `npx ts-node index.ts --limit 1`
 6. Set up a cron job to run every 6 hours:
@@ -127,35 +164,3 @@ For full deployment instructions, see [scraper-worker/README.md](./scraper-worke
    # Add:
    0 */6 * * * cd /opt/scraper-worker && /usr/bin/npx ts-node index.ts >> /var/log/scraper.log 2>&1
    ```
-
-## 💰 Estimated Monthly Cost
-
-AutoArbitrage is designed to be highly cost-efficient by separating the headless browser (DigitalOcean) from the intelligence layer (DeepSeek API).
-
-### 1. DigitalOcean VPS
-
-- Basic Droplet (2GB RAM, 1 CPU, 50GB SSD)
-- Ensures sufficient memory for Playwright headless browsing.
-- **Cost: $12.00 / month**
-
-### 2. DeepSeek API (`deepseek-chat`)
-
-Based on the current DeepSeek V3 token pricing ($0.27 - $0.28 per 1M Input tokens, $0.42 per 1M Output tokens):
-
-- **Workload Assumptions:**
-  - 25 listings scraped every 6 hours = **100 listings/day** = **3,000 listings/month**.
-  - Input strings (7,000 char scrape limit + prompt) ≈ **2,000 input tokens per listing**.
-  - JSON Output payload ≈ **150 output tokens per listing**.
-
-- **Token Math:**
-  - Input Tokens/Month: 3,000 × 2,000 = **6M tokens** ($0.28 * 6 = **$1.68**)
-  - Output Tokens/Month: 3,000 × 150 = **0.45M tokens** ($0.42 * 0.45 = **$0.19**)
-
-- **Cost: ~$1.87 / month**
-
-### 3. Vercel & Supabase
-
-- **Vercel:** Frontend hosting fits entirely within the free Hobby Tier.
-- **Supabase:** Database usage fits entirely within the free Starter Tier.
-
-### **Total Estimated Project Cost: ~$13.87 / month**
