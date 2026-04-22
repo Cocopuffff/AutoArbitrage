@@ -192,7 +192,7 @@ export default function Dashboard() {
                   >
                     {/* Score Badge */}
                     <div className="absolute top-4 right-4">
-                      <div className={`text-xs font-bold px-3 py-1 rounded-full ${l.deal_score >= 85 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-800 text-gray-400'}`}>
+                      <div className={`text-xs font-bold px-3 py-1 rounded-full ${l.deal_score >= 80 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-800 text-gray-400'}`}>
                         {l.deal_score} Score
                       </div>
                     </div>

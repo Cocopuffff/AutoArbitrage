@@ -153,15 +153,20 @@ export async function markListingAsDelisted(listingId: string): Promise<void> {
     }
 }
 
-export async function updateListingUrl(listingId: string, newUrl: string): Promise<void> {
+export async function updateListingUrl(listingId: string, newUrl: string): Promise<boolean> {
     const { error } = await supabase
         .from('listings')
         .update({ source_url: newUrl })
         .eq('id', listingId);
 
-    if (error) {
+    if (error && error.code === '23505') {
+        console.log(`[DB] URL ${newUrl} already exists. Listing ${listingId} is a duplicate.`);
+        return false;
+    } else if (error) {
         console.error('[DB] Error updating source_url for listing', listingId, ':', error);
+        return false;
     }
+    return true;
 }
 
 export async function markListingAsSold(listingId: string): Promise<void> {
@@ -173,4 +178,18 @@ export async function markListingAsSold(listingId: string): Promise<void> {
     if (error) {
         console.error('[DB] Error marking listing as sold for id', listingId, ':', error);
     }
+}
+
+export async function hasAlertBeenSent(listingId: string): Promise<boolean> {
+    const { data, error } = await supabase
+        .from('alerts_log')
+        .select('id')
+        .eq('listing_id', listingId)
+        .limit(1);
+
+    if (error) {
+        console.error('[DB] Error checking alerts log:', error);
+        return false;
+    }
+    return data !== null && data.length > 0;
 }

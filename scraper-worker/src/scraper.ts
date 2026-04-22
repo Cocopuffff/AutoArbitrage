@@ -60,13 +60,21 @@ export async function scrapeListingsForModel(searchUrl: string, expectedModel: s
             try {
                 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
+                // Wait for the full structured details container (SPA lazy-renders it)
+                // Fall back gracefully if it doesn't appear within 5s
+                try {
+                    await page.waitForSelector('div[class^="styles_containerDetailsList"]', { timeout: 5000 });
+                } catch {
+                    // Not available — will fall back to rightContainer or body below
+                }
+
                 const extractionResult = await page.evaluate((expected) => {
-                    // Priority 1: Check the H1 title to ensure it matches the model
+                    // Check the H1 title to ensure it matches the model
                     const h1 = document.querySelector('h1[class*="styles_title"]') as HTMLElement;
                     const title = h1?.innerText || '';
                     const isMismatch = title && !title.toLowerCase().includes(expected.toLowerCase());
 
-                    // Priority 1: The structured details list (Price, Reg Date, Mileage, Description, etc.)
+                    // Prefer the structured details list (Price, Reg Date, Mileage, Description, etc.)
                     const detailsList = document.querySelector(
                         'div[class^="styles_containerDetailsList"]'
                     ) as HTMLElement;
@@ -77,8 +85,12 @@ export async function scrapeListingsForModel(searchUrl: string, expectedModel: s
                     
                     const rawText = (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
                     
-                    return { rawText, isMismatch, title };
+                    return { rawText, isMismatch, title, usedFallback: !detailsList };
                 }, expectedModel);
+
+                if (extractionResult.usedFallback) {
+                    console.warn(`[Scraper] Could not find details container for ${url} — using fallback.`);
+                }
 
                 if (extractionResult.isMismatch) {
                     console.log(`[Scraper] Skipping ${url} — h1 title "${extractionResult.title}" does not contain expected model "${expectedModel}".`);
@@ -197,6 +209,13 @@ export async function scrapeIndividualLinks(items: { url: string; expectedModel:
                     console.log(`[Scraper] Listing ${url} title mismatch ("${titleCheck.title}" vs "${expectedModel}") — marking as delisted.`);
                     results.push({ url, actualUrl: currentUrl, rawText: null, isDead: true, isSold: false });
                     continue;
+                }
+
+                // Wait for the full structured details container before extracting
+                try {
+                    await page.waitForSelector('div[class^="styles_containerDetailsList"]', { timeout: 5000 });
+                } catch {
+                    // Not available — will fall back below
                 }
 
                 // Extract normal text if active

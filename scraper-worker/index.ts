@@ -14,7 +14,7 @@ import 'dotenv/config';
 import { scrapeListingsForModel, scrapeIndividualLinks } from './src/scraper';
 import { parseListingText } from './src/parser';
 import { parseListingWithLLM } from './src/llm';
-import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions, logAlert, getStaleListings, markListingAsDelisted, updateListingUrl, markListingAsSold } from './src/db';
+import { getTargetVehicles, calculateDealScore, upsertListing, cleanFaultyDescriptions, logAlert, getStaleListings, markListingAsDelisted, updateListingUrl, markListingAsSold, hasAlertBeenSent } from './src/db';
 import { sendTelegramAlert } from './src/telegram';
 
 // Parse --limit argument from CLI
@@ -25,6 +25,26 @@ function parseLimit(): number {
         if (!isNaN(val) && val > 0) return Math.min(val, 50);
     }
     return parseInt(process.env.SCRAPE_LIMIT || '5', 10);
+}
+
+async function checkAndSendAlert(result: { listingId: string, isNewOrDropped: boolean } | null, score: number, vehicle: any, price: number, url: string) {
+    if (result && score >= 80) {
+        const alreadyAlerted = await hasAlertBeenSent(result.listingId);
+        if (!alreadyAlerted || result.isNewOrDropped) {
+            const dashboardUrl = process.env.DASHBOARD_URL || 'https://autoarbitragedashboard.vercel.app/';
+            const msg =
+                `🚨 *High Value Alert: ${vehicle.make} ${vehicle.model}*\n` +
+                `Price: $${price.toLocaleString()}\n` +
+                `Deal Score: *${score}/100*\n` +
+                `[View Listing](${url})\n` +
+                `[View Dashboard](${dashboardUrl})`;
+            
+            const telegramMsgId = await sendTelegramAlert(msg);
+            if (telegramMsgId) {
+                await logAlert(result.listingId, telegramMsgId);
+            }
+        }
+    }
 }
 
 async function main() {
@@ -100,21 +120,7 @@ async function main() {
 
             const result = await upsertListing(listingData);
 
-            if (result && result.isNewOrDropped) {
-                if (score >= 85) {
-                    const dashboardUrl = process.env.DASHBOARD_URL || 'https://autoarbitragedashboard.vercel.app/';
-                    const msg =
-                        `🚨 *High Value Alert: ${vehicle.make} ${vehicle.model}*\n` +
-                        `Price: $${extracted.price.toLocaleString()}\n` +
-                        `Deal Score: *${score}/100*\n` +
-                        `[View Listing](${data.url})\n` +
-                        `[View Dashboard](${dashboardUrl})`;
-                    const telegramMsgId = await sendTelegramAlert(msg);
-                    if (telegramMsgId) {
-                        await logAlert(result.listingId, telegramMsgId);
-                    }
-                }
-            }
+            await checkAndSendAlert(result, score, vehicle, extracted.price, data.url);
 
             resultsSummary.push({ url: data.url, score, isNewOrDropped: result?.isNewOrDropped });
         }
@@ -163,7 +169,12 @@ async function main() {
                 // If the server returned a canonical URL, update it in the DB first
                 if (r.actualUrl !== r.url) {
                     console.log(`[Main] Updating source_url: ${r.url} → ${r.actualUrl}`);
-                    await updateListingUrl(dbListing.id, r.actualUrl);
+                    const updated = await updateListingUrl(dbListing.id, r.actualUrl);
+                    if (!updated) {
+                         console.log(`[Main] Marking duplicate stale listing ${dbListing.id} as DELISTED.`);
+                         await markListingAsDelisted(dbListing.id);
+                         continue;
+                    }
                 }
 
                 // Try deterministic parser first, LLM fallback
@@ -209,8 +220,9 @@ async function main() {
                     deal_score: score,
                 };
 
-                await upsertListing(listingData);
+                const result = await upsertListing(listingData);
                 console.log(`[Main] Refreshed active listing ${r.actualUrl}`);
+                await checkAndSendAlert(result, score, vehicle, extracted.price, r.actualUrl);
             }
         }
     }

@@ -1,6 +1,6 @@
 # 🚗 AutoArbitrage
 
-*An automated data pipeline for real-time market analysis, leveraging a distributed architecture for cost-efficient intelligence capability.*
+_An automated data pipeline for real-time market analysis, leveraging a distributed architecture for cost-efficient intelligence capability._
 
 AutoArbitrage is a purpose-built data pipeline designed to monitor the Singapore automotive market for specific 7-seater hybrid vehicles (Mitsubishi Outlander, Toyota Noah, Nissan Serena, Honda Stepwgn). By marrying headless browser automation with LLM-powered data extraction, it transforms the "messy web" of classified ads into a structured, highly deterministic valuation engine and real-time alerting system.
 
@@ -12,19 +12,22 @@ The system implements a robust Extract, Transform, Load (ETL) architecture to en
 - **AI-Powered Transformation:** Raw unstructured text/HTML is passed through **DeepSeek / Gemini 2.5 Flash**. The LLM operates primarily as a high-speed deterministic data parser, strictly enforcing JSON schema extraction for fields like price, mileage, and registration dates without generation drift.
 - **Valuation Engine (Business Logic):** A TypeScript-based decision engine applies a weighted mathematical formula based on live data and exact registration dates to derive a normalized **Deal Score (0-100)** for every asset.
 - **State Management (Load):** Normalized data is securely persisted in **Supabase (PostgreSQL)**. Time-series price tracking is handled via an append-only `price_history` table to monitor delta shifts and arbitrage opportunities.
-- **Event-Driven Alerting:** When the Valuation Engine flags a Deal Score ≥ 85, a Telegram Bot pushes an immediate, actionable alert to the end-user with a complete value breakdown and direct asset link.
+- **Event-Driven Alerting:** When the Valuation Engine flags a Deal Score ≥ 80, a Telegram Bot pushes an immediate, actionable alert to the end-user with a complete value breakdown and direct asset link.
 
 ## 🛠️ Technology Stack
 
 **Frontend & Visualization**
+
 - Next.js 16 (App Router) & Tailwind CSS (Deployed on Vercel)
 - Recharts.js for time-series and metric visualization
 
 **Backend & Data Engineering**
+
 - Standalone Node.js + Playwright (Headless Chromium on DigitalOcean)
 - Supabase (PostgreSQL) with Row Level Security (RLS) policies
 
 **AI & Integrations**
+
 - Vercel AI SDK integration mapping to DeepSeek and Google Gemini 2.5 Flash
 - Telegram Bot API for event notifications
 
@@ -64,9 +67,9 @@ Leveraging highly efficient token pricing models ($0.27 - $0.28 per 1M Input tok
 
 The system relies on a clean relational model to construct historical pricing deltas and enable automated "Price Drop" alerts.
 
-| Table         | Key Fields                                   | Purpose                                |
-| ------------- | -------------------------------------------- | -------------------------------------- |
-| `vehicles`      | make, model, baseline_depreciation           | Master taxonomy of tracked assets.         |
+| Table           | Key Fields                                   | Purpose                                              |
+| --------------- | -------------------------------------------- | ---------------------------------------------------- |
+| `vehicles`      | make, model, baseline_depreciation           | Master taxonomy of tracked assets.                   |
 | `listings`      | current_price, registration_date, deal_score | Current state representation of market inventory.    |
 | `price_history` | listing_id, price, recorded_at               | Time-series tracking for price fluctuation analysis. |
 
@@ -156,8 +159,9 @@ For full deployment instructions, see [scraper-worker/README.md](./scraper-worke
    | `SCRAPE_LIMIT`        | Max listings per vehicle per run (default: 5) |
    | `DASHBOARD_URL`       | Your Vercel dashboard URL                     |
 
-5. Test run: `npx ts-node index.ts --limit 1`
-6. Set up a cron job to run every 6 hours:
+5. Change directory to `scraper-worker` root: `cd /opt/scraper-worker`
+6. Test run: `npx ts-node index.ts --limit 1`
+7. Set up a cron job to run every 6 hours:
 
    ```bash
    crontab -e

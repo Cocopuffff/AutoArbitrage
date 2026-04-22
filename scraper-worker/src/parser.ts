@@ -47,9 +47,10 @@ export function parseListingText(rawText: string): ParsedListing | null {
         const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
 
         // --- Price ---
-        // Pattern: "Price" followed by "$196,800" or "Sold" on the next line
-        if (line === 'Price' && nextLine) {
-            if (nextLine.toLowerCase() === 'sold') {
+        // Handle "Price\n$196,800", "Price: $196,800", or "Price $196,800"
+        if (line.toLowerCase().startsWith('price') && price === null) {
+            const checkStr = line + ' ' + nextLine;
+            if (checkStr.toLowerCase().includes('sold')) {
                 return {
                     price: null,
                     is_sold: true,
@@ -61,9 +62,14 @@ export function parseListingText(rawText: string): ParsedListing | null {
                     description: null,
                 };
             } else {
-                const priceMatch = nextLine.replace(/[$,]/g, '').match(/^(\d+)$/);
+                const priceMatch = checkStr.match(/\$[\s]*([\d,]+)/);
                 if (priceMatch) {
-                    price = parseInt(priceMatch[1], 10);
+                    price = parseInt(priceMatch[1].replace(/,/g, ''), 10);
+                } else {
+                    const fallbackMatch = checkStr.match(/([\d,]{4,})/);
+                    if (fallbackMatch) {
+                        price = parseInt(fallbackMatch[1].replace(/,/g, ''), 10);
+                    }
                 }
             }
         }
@@ -71,61 +77,75 @@ export function parseListingText(rawText: string): ParsedListing | null {
         // --- Depreciation (skip — not needed for DB but confirms layout) ---
 
         // --- Reg Date ---
-        // Pattern: "Reg Date" followed by "13-Oct-2025"
-        if (line === 'Reg Date' && nextLine) {
-            const regMatch = nextLine.match(/^(\d{1,2})-(\w{3})-(\d{4})$/);
+        // Handle "Reg Date\n13-Oct-2025" or "Reg Date 13-Oct-2025"
+        if (line.toLowerCase().startsWith('reg date') && registrationDate === null) {
+            const checkStr = line + ' ' + nextLine;
+            const regMatch = checkStr.match(/(\d{1,2})-(\w{3})-(\d{4})/);
             if (regMatch) {
                 const day = regMatch[1].padStart(2, '0');
                 const monthKey = regMatch[2].toLowerCase();
                 const monthNum = MONTH_MAP[monthKey];
                 if (monthNum) {
-                    // ISO format: YYYY-MM-DD
                     registrationDate = `${regMatch[3]}-${monthNum}-${day}`;
                 }
             }
         }
 
         // --- Remaining Lease (COE left) ---
-        // Pattern: "(9yrs 7mths 2days COE left)" — appears on the line after the reg date value
-        const coeMatch = line.match(/\((\d+)yrs?\s+(\d+)mths?\s+(\d+)days?\s+COE\s+left\)/i);
+        // Pattern: "(9yrs 7mths 2days COE left)" or "(9yrs 21days COE left)"
+        const coeMatch = line.match(/\((.*?)\s*COE\s+left\)/i);
         if (coeMatch) {
-            const yrs = parseInt(coeMatch[1], 10);
-            const mths = parseInt(coeMatch[2], 10);
-            const days = parseInt(coeMatch[3], 10);
+            const coeText = coeMatch[1];
+            let yrs = 0, mths = 0, days = 0;
+            
+            const yMatch = coeText.match(/(\d+)\s*yrs?/i);
+            if (yMatch) yrs = parseInt(yMatch[1], 10);
+            
+            const mMatch = coeText.match(/(\d+)\s*mth|(\d+)\s*mths?/i);
+            if (mMatch) mths = parseInt(mMatch[1] || mMatch[2], 10);
+            
+            const dMatch = coeText.match(/(\d+)\s*day|(\d+)\s*days?/i);
+            if (dMatch) days = parseInt(dMatch[1] || dMatch[2], 10);
+            
             remainingLease = Math.round(yrs + mths / 12 + days / 365);
         }
 
         // --- Mileage ---
-        // Pattern: "Mileage" followed by "37 km"
-        if (line === 'Mileage' && nextLine) {
-            const mileageMatch = nextLine.replace(/,/g, '').match(/^([\d]+)\s*km/i);
+        // Handle "Mileage\n37 km" or "Mileage 37 km"
+        if (line.toLowerCase().startsWith('mileage') && mileage === null) {
+            const checkStr = line + ' ' + nextLine;
+            const mileageMatch = checkStr.replace(/,/g, '').match(/([\d]+)\s*km/i);
             if (mileageMatch) {
                 mileage = parseInt(mileageMatch[1], 10);
             }
         }
 
         // --- Manufactured Year ---
-        // Pattern: "Manufactured" followed by "2024"
-        if (line === 'Manufactured' && nextLine) {
-            const yearMatch = nextLine.match(/^(\d{4})$/);
+        // Handle "Manufactured\n2024" or "Manufactured 2024"
+        if (line.toLowerCase().startsWith('manufactured') && year === null) {
+            const checkStr = line + ' ' + nextLine;
+            const yearMatch = checkStr.match(/\b(19|20\d{2})\b/);
             if (yearMatch) {
                 year = parseInt(yearMatch[1], 10);
             }
         }
 
         // --- PARF Rebate ---
-        // Pattern: "PARF Rebate" followed by "$xx,xxx"
-        if (line === 'PARF Rebate' && nextLine) {
-            const parfMatch = nextLine.replace(/[$,]/g, '').match(/^(\d+)/);
+        if (line.toLowerCase().startsWith('parf rebate') && parfRebate === null) {
+            const checkStr = line + ' ' + nextLine;
+            const parfMatch = checkStr.match(/\$[\s]*([\d,]+)/);
             if (parfMatch) {
-                parfRebate = parseInt(parfMatch[1], 10);
+                parfRebate = parseInt(parfMatch[1].replace(/,/g, ''), 10);
             }
         }
 
         // --- Description ---
-        // Pattern: "Description" followed by the full dealer description
-        if (line === 'Description' && nextLine) {
-            description = nextLine;
+        if (line.toLowerCase().startsWith('description') && description === null) {
+            if (line.length > 15) {
+                description = line.substring(11).trim();
+            } else if (nextLine) {
+                description = nextLine;
+            }
         }
     }
 
