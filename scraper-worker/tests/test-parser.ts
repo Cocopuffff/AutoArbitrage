@@ -64,7 +64,8 @@ const expected = {
     mileage: 50,
     year: 2024,
     registration_date: '2025-05-14',
-    remaining_lease: 9,
+    depreciation: 19750,
+    remaining_lease: 9.1,
     description: "Brand new Toyota Noah Hybrid! Transparent deal! Full loan monthly $21xx! Reliable and well-regarded MPV! Practical, spacious interior, versatile seating arrangement and ample cargo space! Excellent fuel efficiency at 23.4km/l! 2+2+3 seating configuration! Captain seats and no drive shaft hump at second row! Flexible financing schemes/PHV/in house loans available! Contact us for viewing today!",
 };
 

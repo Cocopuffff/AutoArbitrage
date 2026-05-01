@@ -6,16 +6,23 @@ const supabaseKey = process.env.SUPABASE_SECRET_KEY!;
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Deterministic Scoring Formula
-// W1 = 0.5 (Price), W2 = 0.2 (Mileage), W3 = 0.3 (Depreciation)
+// W1 = 0.5 (Depreciation), W2 = 0.25 (Mileage Efficiency), W3 = 0.25 (Miles Driven)
 // Scores are 0-100 (Higher is a better financial deal)
+//
+// Key design: 
+// 1. Depreciation uses the website's depreciation figure (which already factors in PARF rebate).
+// 2. Mileage Efficiency calculates annual operating cost (based on a heavy 73,000 km/yr user).
+// 3. Miles Driven compares actual annual distance against a baseline expected annual distance.
 export function calculateDealScore(
     price: number,
     mileage: number,
     registrationDate: string | null,
     year: number,
     remaining_lease: number | null,
-    baselineMileage: number,
-    baselineDepreciation: number
+    depreciation: number | null,
+    baselineFuelMileage: number,
+    baselineDepreciation: number,
+    expectedAnnualMileage: number
 ): number {
     const now = new Date();
     let age: number;
@@ -25,7 +32,7 @@ export function calculateDealScore(
         const parsed = new Date(registrationDate);
         if (!isNaN(parsed.getTime())) {
             const ageYears = (now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-            age = Math.max(1, Math.floor(ageYears));
+            age = Math.max(0.5, ageYears);
         } else {
             age = Math.max(1, now.getFullYear() - year);
         }
@@ -37,27 +44,25 @@ export function calculateDealScore(
     const remainingYears =
         remaining_lease !== null && remaining_lease > 0 ? remaining_lease : Math.max(1, 10 - age);
 
-    // 1. Corrected Forward-Looking Annual Depreciation
-    const actualAnnualDepreciation = price / remainingYears;
-
-    // 2. Dynamic Ratio-Based Normalization
-    const baselinePrice = baselineDepreciation * remainingYears;
-
-    // Price Score
-    let pScore = 100 * (baselinePrice / price);
-    pScore = Math.max(0, Math.min(100, pScore));
-
-    // Mileage Score
-    const annualMileage = mileage / age;
-    let mScore = 100 * (baselineMileage / Math.max(1, annualMileage));
-    mScore = Math.max(0, Math.min(100, mScore));
-
-    // Depreciation Score
+    // 1. Depreciation Score (50%)
+    const actualAnnualDepreciation = depreciation ?? (price / remainingYears);
     let dScore = 100 * (baselineDepreciation / actualAnnualDepreciation);
     dScore = Math.max(0, Math.min(100, dScore));
 
-    // 3. Apply Weights
-    const finalScore = 0.5 * pScore + 0.2 * mScore + 0.3 * dScore;
+    // 2. Mileage Efficiency Score (25%) - Based on operating cost difference
+    // Assume 200km/day = 73,000 km/yr. Fuel cost at $2.5/liter.
+    const annualFuelCost = (73000 / baselineFuelMileage) * 2.5;
+    // Benchmark worst-case scenario: $20,000/yr (approx 9.1 km/l)
+    let efficiencyScore = 100 * ((20000 - annualFuelCost) / 20000);
+    efficiencyScore = Math.max(0, Math.min(100, efficiencyScore));
+
+    // 3. Miles Driven Score (25%)
+    const actualAnnualDistance = mileage / age;
+    let milesDrivenScore = 100 * (expectedAnnualMileage / Math.max(1, actualAnnualDistance));
+    milesDrivenScore = Math.max(0, Math.min(100, milesDrivenScore));
+
+    // 4. Apply Weights
+    const finalScore = 0.5 * dScore + 0.25 * efficiencyScore + 0.25 * milesDrivenScore;
 
     return Math.round(finalScore);
 }

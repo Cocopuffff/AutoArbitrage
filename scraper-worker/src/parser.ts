@@ -14,8 +14,9 @@ export interface ParsedListing {
     mileage: number | null;
     year: number | null;
     registration_date: string | null;   // YYYY-MM-DD (ISO format for Supabase DATE column)
+    depreciation: number | null;        // annual depreciation from website (already factors in PARF)
     parf_rebate: number | null;
-    remaining_lease: number | null;      // rounded integer years
+    remaining_lease: number | null;      // years with 1 decimal place
     description: string | null;
     is_confident?: boolean;
 }
@@ -38,6 +39,7 @@ export function parseListingText(rawText: string): ParsedListing | null {
     let mileage: number | null = null;
     let year: number | null = null;
     let registrationDate: string | null = null;
+    let depreciation: number | null = null;
     let parfRebate: number | null = null;
     let remainingLease: number | null = null;
     let description: string | null = null;
@@ -57,6 +59,7 @@ export function parseListingText(rawText: string): ParsedListing | null {
                     mileage: null,
                     year: null,
                     registration_date: null,
+                    depreciation: null,
                     parf_rebate: null,
                     remaining_lease: null,
                     description: null,
@@ -74,7 +77,15 @@ export function parseListingText(rawText: string): ParsedListing | null {
             }
         }
 
-        // --- Depreciation (skip — not needed for DB but confirms layout) ---
+        // --- Depreciation ---
+        // Handle "Depreciation\n$19,750 /yr" or "Depreciation $19,750 /yr"
+        if (line.toLowerCase().startsWith('depreciation') && depreciation === null) {
+            const checkStr = line + ' ' + nextLine;
+            const depreMatch = checkStr.match(/\$[\s]*([\d,]+)/);
+            if (depreMatch) {
+                depreciation = parseInt(depreMatch[1].replace(/,/g, ''), 10);
+            }
+        }
 
         // --- Reg Date ---
         // Handle "Reg Date\n13-Oct-2025" or "Reg Date 13-Oct-2025"
@@ -107,7 +118,7 @@ export function parseListingText(rawText: string): ParsedListing | null {
             const dMatch = coeText.match(/(\d+)\s*day|(\d+)\s*days?/i);
             if (dMatch) days = parseInt(dMatch[1] || dMatch[2], 10);
             
-            remainingLease = Math.round(yrs + mths / 12 + days / 365);
+            remainingLease = Math.round((yrs + mths / 12 + days / 365) * 10) / 10;
         }
 
         // --- Mileage ---
@@ -161,6 +172,7 @@ export function parseListingText(rawText: string): ParsedListing | null {
         mileage,
         year,
         registration_date: registrationDate,
+        depreciation,
         parf_rebate: parfRebate,
         remaining_lease: remainingLease,
         description,

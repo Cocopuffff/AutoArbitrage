@@ -7,6 +7,7 @@ CREATE TABLE public.vehicles (
     model TEXT NOT NULL,
     baseline_fuel_mileage FLOAT NOT NULL,
     baseline_depreciation FLOAT NOT NULL,
+    expected_annual_mileage INT NOT NULL DEFAULT 15000,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -70,11 +71,11 @@ CREATE POLICY "Enable read access for all users" ON public.price_history FOR SEL
 -- CREATE POLICY "Enable update for authenticated users only" ON public.listings FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
 -- Insert Target Vehicles Seed Data
-INSERT INTO public.vehicles (make, model, baseline_fuel_mileage, baseline_depreciation) VALUES
-('Mitsubishi', 'Outlander', 13.5, 17500),
-('Toyota', 'Noah Hybrid', 23.5, 18500),
-('Nissan', 'Serena', 20.2, 19000),
-('Honda', 'Stepwgn Hybrid Spada', 19.5, 19500);
+INSERT INTO public.vehicles (make, model, baseline_fuel_mileage, baseline_depreciation, expected_annual_mileage) VALUES
+('Mitsubishi', 'Outlander', 13.0, 17500, 15000),
+('Toyota', 'Noah Hybrid', 23.5, 18500, 15000),
+('Nissan', 'Serena', 18.5, 19000, 15000),
+('Honda', 'Stepwgn Hybrid Spada', 18.5, 19500, 15000);
  
 -- 5. `upsert_listing` RPC Function
 CREATE OR REPLACE FUNCTION public.upsert_listing(

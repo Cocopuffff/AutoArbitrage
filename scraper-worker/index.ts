@@ -95,6 +95,7 @@ async function main() {
             const year = extracted.year || new Date().getFullYear() - 8;
             const remainingLease = extracted.remaining_lease || null;
             const registrationDate = extracted.registration_date || null;
+            const depreciation = extracted.depreciation || null;
 
             const score = calculateDealScore(
                 extracted.price,
@@ -102,8 +103,10 @@ async function main() {
                 registrationDate,
                 year,
                 remainingLease,
+                depreciation,
                 vehicle.baseline_fuel_mileage,
-                vehicle.baseline_depreciation
+                vehicle.baseline_depreciation,
+                vehicle.expected_annual_mileage
             );
 
             const listingData = {
@@ -197,6 +200,7 @@ async function main() {
                 const year = extracted.year || new Date().getFullYear() - 8;
                 const remainingLease = extracted.remaining_lease || null;
                 const registrationDate = extracted.registration_date || null;
+                const depreciation = extracted.depreciation || null;
 
                 const score = calculateDealScore(
                     extracted.price,
@@ -204,8 +208,10 @@ async function main() {
                     registrationDate,
                     year,
                     remainingLease,
+                    depreciation,
                     vehicle.baseline_fuel_mileage,
-                    vehicle.baseline_depreciation
+                    vehicle.baseline_depreciation,
+                    vehicle.expected_annual_mileage
                 );
 
                 const listingData = {
