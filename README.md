@@ -124,7 +124,7 @@ For full deployment instructions, see [scraper-worker/README.md](./scraper-worke
    ssh root@<your-droplet-ip>
 
    # Create 1GB swap (required — Chromium crashes without it)
-   fallocate -l 1G /swapfile
+   fallocate -l 2G /swapfile
    chmod 600 /swapfile
    mkswap /swapfile
    swapon /swapfile

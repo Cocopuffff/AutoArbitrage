@@ -1,4 +1,84 @@
-import { chromium } from 'playwright';
+import { chromium, type Page, type BrowserContext } from 'playwright';
+
+const STEALTH_UA =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+/**
+ * Apply stealth patches to a page so common headless-detection checks fail.
+ * Covers navigator.webdriver, chrome runtime, plugins, languages, and permissions.
+ */
+async function applyStealthScripts(page: Page) {
+    await page.addInitScript(() => {
+        // Hide webdriver flag
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+
+        // Fake chrome runtime (Chromium headless doesn't expose window.chrome)
+        (window as any).chrome = {
+            runtime: { connect: () => {}, sendMessage: () => {} },
+        };
+
+        // Fake plugins array (headless has length 0)
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5] as any,
+        });
+
+        // Fake languages
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en'],
+        });
+
+        // Permissions — prevent Notification permission leak
+        const originalQuery = window.Permissions?.prototype?.query;
+        if (originalQuery) {
+            window.Permissions.prototype.query = function (params: any) {
+                if (params.name === 'notifications') {
+                    return Promise.resolve({ state: 'denied' } as PermissionStatus);
+                }
+                return originalQuery.call(this, params);
+            };
+        }
+    });
+}
+
+/**
+ * Navigate to a URL with retry + exponential backoff.
+ * Helps survive transient network issues and throttled datacenter IPs.
+ */
+async function gotoWithRetry(
+    page: Page,
+    url: string,
+    options: { waitUntil: 'domcontentloaded' | 'load'; timeout: number },
+    retries = 3
+) {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            await page.goto(url, options);
+            return;
+        } catch (err) {
+            if (attempt === retries) throw err;
+            const delay = attempt * 5000; // 5s, 10s, 15s
+            console.warn(`[Scraper] goto attempt ${attempt}/${retries} failed, retrying in ${delay / 1000}s...`);
+            await page.waitForTimeout(delay);
+        }
+    }
+}
+
+/**
+ * Create a browser context with realistic fingerprint to avoid bot detection.
+ */
+async function createStealthContext(browser: import('playwright').Browser): Promise<BrowserContext> {
+    return browser.newContext({
+        userAgent: STEALTH_UA,
+        locale: 'en-SG',
+        viewport: { width: 1366, height: 768 },
+        extraHTTPHeaders: {
+            'Accept-Language': 'en-SG,en;q=0.9',
+            'sec-ch-ua': '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"Windows"',
+        },
+    });
+}
 
 /**
  * Scrapes SGCarMart listing pages for a given vehicle search URL.
@@ -18,16 +98,13 @@ export async function scrapeListingsForModel(searchUrl: string, expectedModel: s
         ],
     });
 
-    const context = await browser.newContext({
-        userAgent:
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    });
-
+    const context = await createStealthContext(browser);
     const page = await context.newPage();
+    await applyStealthScripts(page);
     const results: { url: string; rawText: string }[] = [];
 
     try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
         // Wait for React/SPA to finish rendering client-side components
         await page.waitForTimeout(2000);
 
@@ -77,21 +154,25 @@ export async function scrapeListingsForModel(searchUrl: string, expectedModel: s
                     const title = h1?.innerText || '';
                     const isMismatch = title && !title.toLowerCase().includes(expected.toLowerCase());
 
-                    // Prefer the structured details list (Price, Reg Date, Mileage, Description, etc.)
-                    const detailsList = document.querySelector(
-                        'div[class^="styles_containerDetailsList"]'
-                    ) as HTMLElement;
-                    // Fallback selectors for older page layouts
-                    const overviewContainer = document.querySelector(
-                        'div[class^="styles_rightContainer"]'
-                    ) as HTMLElement;
+                    // Find the best container by checking innerText for essential keywords
+                    const allContainers = Array.from(document.querySelectorAll('div[class^="styles_"]')) as HTMLElement[];
+                    let target = document.body;
                     
-                    const target = detailsList || overviewContainer || document.body;
+                    for (const el of allContainers) {
+                        const text = el.innerText || '';
+                        if (text.includes('Price\n') && text.includes('Depreciation\n') && text.includes('Reg Date\n')) {
+                            // Prefer the smallest matching container to avoid grabbing the entire page body
+                            if (target === document.body || text.length < (target.innerText?.length || Infinity)) {
+                                target = el;
+                            }
+                        }
+                    }
+                    
                     let text = target.innerText;
                     if (!text || text.trim() === '') text = target.textContent || '';
                     const rawText = text.substring(0, 7000);
                     
-                    return { rawText, isMismatch, title, usedFallback: !detailsList };
+                    return { rawText, isMismatch, title, usedFallback: target === document.body };
                 }, expectedModel);
 
                 if (extractionResult.usedFallback) {
@@ -135,12 +216,10 @@ export async function scrapeIndividualLinks(items: { url: string; expectedModel:
         ],
     });
 
-    const context = await browser.newContext({
-        userAgent:
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    });
+    const context = await createStealthContext(browser);
 
     const page = await context.newPage();
+    await applyStealthScripts(page);
     const results: { url: string; actualUrl: string; rawText: string | null; isDead: boolean; isSold: boolean }[] = [];
 
     try {
@@ -229,9 +308,18 @@ export async function scrapeIndividualLinks(items: { url: string; expectedModel:
 
                 // Extract normal text if active
                 const rawText = await page.evaluate(() => {
-                    const detailsList = document.querySelector('div[class^="styles_containerDetailsList"]') as HTMLElement;
-                    const overviewContainer = document.querySelector('div[class^="styles_rightContainer"]') as HTMLElement;
-                    const target = detailsList || overviewContainer || document.body;
+                    const allContainers = Array.from(document.querySelectorAll('div[class^="styles_"]')) as HTMLElement[];
+                    let target = document.body;
+                    
+                    for (const el of allContainers) {
+                        const text = el.innerText || '';
+                        if (text.includes('Price\n') && text.includes('Depreciation\n') && text.includes('Reg Date\n')) {
+                            if (target === document.body || text.length < (target.innerText?.length || Infinity)) {
+                                target = el;
+                            }
+                        }
+                    }
+
                     let text = target.innerText;
                     if (!text || text.trim() === '') text = target.textContent || '';
                     return text.substring(0, 7000);

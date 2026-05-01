@@ -1,4 +1,4 @@
-import { scrapeIndividualLinks } from './src/scraper';
+import { scrapeIndividualLinks } from '../src/scraper';
 
 async function run() {
     const res = await scrapeIndividualLinks([{

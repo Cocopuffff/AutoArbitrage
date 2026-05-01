@@ -149,9 +149,9 @@ export function parseListingText(rawText: string): ParsedListing | null {
         }
     }
 
-    // Price is the only truly essential field
     if (price === null) {
         console.log('[Parser] Could not extract price — returning null.');
+        console.log('[Parser] First 500 chars of rawText:', rawText.substring(0, 500));
         return null;
     }
 
