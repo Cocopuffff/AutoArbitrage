@@ -63,7 +63,10 @@ export async function scrapeListingsForModel(searchUrl: string, expectedModel: s
                 // Wait for the full structured details container (SPA lazy-renders it)
                 // Fall back gracefully if it doesn't appear within 5s
                 try {
-                    await page.waitForSelector('div[class^="styles_containerDetailsList"]', { timeout: 5000 });
+                    await page.waitForFunction(() => {
+                        const el = document.querySelector('div[class^="styles_containerDetailsList"]') as HTMLElement;
+                        return el && (el.innerText.length > 10 || (el.textContent && el.textContent.length > 10));
+                    }, { timeout: 5000 });
                 } catch {
                     // Not available — will fall back to rightContainer or body below
                 }
@@ -83,7 +86,10 @@ export async function scrapeListingsForModel(searchUrl: string, expectedModel: s
                         'div[class^="styles_rightContainer"]'
                     ) as HTMLElement;
                     
-                    const rawText = (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
+                    const target = detailsList || overviewContainer || document.body;
+                    let text = target.innerText;
+                    if (!text || text.trim() === '') text = target.textContent || '';
+                    const rawText = text.substring(0, 7000);
                     
                     return { rawText, isMismatch, title, usedFallback: !detailsList };
                 }, expectedModel);
@@ -213,7 +219,10 @@ export async function scrapeIndividualLinks(items: { url: string; expectedModel:
 
                 // Wait for the full structured details container before extracting
                 try {
-                    await page.waitForSelector('div[class^="styles_containerDetailsList"]', { timeout: 5000 });
+                    await page.waitForFunction(() => {
+                        const el = document.querySelector('div[class^="styles_containerDetailsList"]') as HTMLElement;
+                        return el && (el.innerText.length > 10 || (el.textContent && el.textContent.length > 10));
+                    }, { timeout: 5000 });
                 } catch {
                     // Not available — will fall back below
                 }
@@ -222,7 +231,10 @@ export async function scrapeIndividualLinks(items: { url: string; expectedModel:
                 const rawText = await page.evaluate(() => {
                     const detailsList = document.querySelector('div[class^="styles_containerDetailsList"]') as HTMLElement;
                     const overviewContainer = document.querySelector('div[class^="styles_rightContainer"]') as HTMLElement;
-                    return (detailsList || overviewContainer || document.body).innerText.substring(0, 7000);
+                    const target = detailsList || overviewContainer || document.body;
+                    let text = target.innerText;
+                    if (!text || text.trim() === '') text = target.textContent || '';
+                    return text.substring(0, 7000);
                 });
 
                 // Detection 5: Check if price field shows "Sold"
